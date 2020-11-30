@@ -5,7 +5,8 @@ const BODYPARSER = require("body-parser");
 const EJS = require("ejs");
 const MONGOOSE = require("mongoose");
 const ENCRYPT = require("mongoose-encryption");
-const MD5 = require("md5");
+const BCRYPT = require("bcrypt");
+const SALTROUNDS = 10;
 
 const APP = EXPRESS();
 APP.use(EXPRESS.static("public"));
@@ -24,10 +25,10 @@ const userSchema = new MONGOOSE.Schema({
   password: String
 });
 
-userSchema.plugin(ENCRYPT, {
-  secret: process.env.SECRET,
-  encryptedFields: ["password"]
-});
+// userSchema.plugin(ENCRYPT, {
+//   secret: process.env.SECRET,
+//   encryptedFields: ["password"]
+// });
 
 const USER = MONGOOSE.model("User", userSchema);
 
@@ -45,13 +46,17 @@ APP.get("/register", (req, res) => {
 
 APP.post("/login", (req, res) => {
   const username = req.body.username;
-  const password = MD5(req.body.password);
+  const password = req.body.password;
 
   USER.findOne({
     email: username
   }, (err, foundUser) => {
-    if (!err && foundUser && foundUser.password === password) {
-      res.render("secrets");
+    if (!err && foundUser) {
+      BCRYPT.compare(password, foundUser.password, (err, result) => {
+        if(result === true){
+          res.render("secrets");
+        }
+      });
     } else {
       res.send(err);
     }
@@ -59,13 +64,17 @@ APP.post("/login", (req, res) => {
 });
 
 APP.post("/register", (req, res) => {
-  const newUser = new USER({
-    email: req.body.username,
-    password: MD5(req.body.password)
+
+  BCRYPT.hash(req.body.password, SALTROUNDS, (err, hash) => {
+    const newUser = new USER({
+      email: req.body.username,
+      password: hash
+    });
+    newUser.save((err) => {
+      err ? res.send(err) : res.render("secrets");
+    });
   });
-  newUser.save((err) => {
-    err ? res.send(err) : res.render("secrets");
-  });
+
 });
 
 APP.listen(3000, () => {
