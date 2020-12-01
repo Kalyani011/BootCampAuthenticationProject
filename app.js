@@ -7,7 +7,9 @@ const MONGOOSE = require("mongoose");
 const SESSION = require("express-session");
 const PASSPORT = require("passport");
 const PASSPORT_LOCAL_MONGOOSE = require("passport-local-mongoose");
-
+const GoogleStrategy = require("passport-google-oauth20").Strategy;
+const findOrCreate = require("mongoose-findorcreate");
+const FacebookStrategy = require("passport-facebook");
 
 const APP = EXPRESS();
 APP.use(EXPRESS.static("public"));
@@ -31,7 +33,9 @@ MONGOOSE.set("useCreateIndex", true);
 
 const userSchema = new MONGOOSE.Schema({
   email: String,
-  password: String
+  password: String,
+  googleId: String,
+  facebookId: String
 });
 
 // userSchema.plugin(ENCRYPT, {
@@ -39,16 +43,79 @@ const userSchema = new MONGOOSE.Schema({
 //   encryptedFields: ["password"]
 // });
 userSchema.plugin(PASSPORT_LOCAL_MONGOOSE);
+userSchema.plugin(findOrCreate);
 
 const USER = MONGOOSE.model("User", userSchema);
 
 PASSPORT.use(USER.createStrategy());
-PASSPORT.serializeUser(USER.serializeUser());
-PASSPORT.deserializeUser(USER.deserializeUser());
+
+PASSPORT.serializeUser(function(user, done) {
+  done(null, user.id);
+});
+
+PASSPORT.deserializeUser(function(id, done) {
+  USER.findById(id, function(err, user) {
+    done(err, user);
+  });
+});
+
+PASSPORT.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: "http://localhost:3000/auth/google/secrets",
+    userProfileUrl: "https://www.googleapis.com/oauth2/v3/userinfo"
+  },
+  function(accessToken, refreshToken, profile, cb) {
+    USER.findOrCreate({
+      googleId: profile.id
+    }, function(err, user) {
+      return cb(err, user);
+    });
+  }
+));
+
+PASSPORT.use(new FacebookStrategy({
+    clientID: process.env.FACEBOOK_APP_ID,
+    clientSecret: process.env.FACEBOOK_APP_SECRET,
+    callbackURL: "http://localhost:3000/auth/facebook/secrets"
+  },
+  function(accessToken, refreshToken, profile, cb) {
+    USER.findOrCreate({
+      facebookId: profile.id
+    }, function(err, user) {
+      return cb(err, user);
+    });
+  }
+));
 
 APP.get("/", (req, res) => {
   res.render("home");
 });
+
+APP.get("/auth/google", PASSPORT.authenticate('google', {
+  scope: ["profile"]
+}));
+
+APP.get('/auth/google/secrets',
+  PASSPORT.authenticate('google', {
+    failureRedirect: '/login'
+  }),
+  function(req, res) {
+    // Successful authentication, redirect home.
+    res.redirect("/secrets");
+  });
+
+APP.get('/auth/facebook',
+  PASSPORT.authenticate('facebook'));
+
+APP.get('/auth/facebook/secrets',
+  PASSPORT.authenticate('facebook', {
+    failureRedirect: '/login'
+  }),
+  function(req, res) {
+    // Successful authentication, redirect home.
+    res.redirect('/secrets');
+  });
 
 APP.get("/login", (req, res) => {
   res.render("login");
