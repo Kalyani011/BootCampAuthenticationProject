@@ -35,7 +35,8 @@ const userSchema = new MONGOOSE.Schema({
   email: String,
   password: String,
   googleId: String,
-  facebookId: String
+  facebookId: String,
+  secret: String
 });
 
 // userSchema.plugin(ENCRYPT, {
@@ -126,16 +127,48 @@ APP.get("/register", (req, res) => {
 });
 
 APP.get("/secrets", (req, res) => {
-  if (req.isAuthenticated()) {
-    res.render("secrets");
-  } else {
-    res.redirect("/login");
-  }
+  USER.find({
+    "secret": {
+      $ne: null
+    }
+  }, (err, foundUsers) => {
+    if (!err && foundUsers) {
+      res.render("secrets", {
+        usersWithSecrets: foundUsers
+      });
+    } else {
+      console.log(err);
+    }
+  })
 });
 
 APP.get("/logout", (req, res) => {
   req.logout();
   res.redirect("/");
+});
+
+APP.get("/submit", (req, res) => {
+  if (req.isAuthenticated()) {
+    res.render("submit");
+  } else {
+    res.redirect("/login");
+  }
+});
+
+APP.post("/submit", (req, res) => {
+  USER.findById(req.user.id, (err, foundUser) => {
+    if (err) {
+      console.log(err);
+      res.redirect("/secrets");
+    } else {
+      if (foundUser) {
+        foundUser.secret = req.body.secret;
+        foundUser.save((err) => {
+          err ? console.log(err) : res.redirect("/secrets");
+        });
+      }
+    }
+  });
 });
 
 APP.post("/register", (req, res) => {
