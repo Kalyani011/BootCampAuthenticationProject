@@ -202,6 +202,11 @@ APP.post("/login", (req, res) => {
   });
 });
 
-APP.listen(3000, () => {
+let port = process.env.PORT;
+if (port === "" || port === null) {
+  port = 3000;
+}
+
+APP.listen(port || 3000, () => {
   console.log("Server running on port 3000");
 });
